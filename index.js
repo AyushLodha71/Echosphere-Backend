@@ -1,3 +1,5 @@
+require('dotenv').config()
+
 // import a package
 const express = require('express')
 
@@ -6,14 +8,39 @@ const app = express()
 
 const { execFile } = require('child_process')
 
+const { Client, Databases, Storage } = require('node-appwrite')
+
+const client = new Client()
+    .setEndpoint(process.env.APPWRITE_ENDPOINT)
+    .setProject(process.env.APPWRITE_PROJECT_ID)
+    .setKey(process.env.APPWRITE_API_KEY)
+
+const databases = new Databases(client)
+const storage = new Storage(client)
+
 // define a route
 app.get('/health', (req, res) => {
     console.log('Status: alive')
     res.json({ status: 'alive' })
 })
 
-app.get('/stream/:youtubeId', (req, res) => {
+app.get('/stream/:youtubeId', async (req, res) => {
     const videoUrl = `https://www.youtube.com/watch?v=${req.params.youtubeId}`
+    // 1. CACHE CHECK — try to fetch the row by ID
+    try {
+        const row = await databases.getDocument(
+            process.env.APPWRITE_DATABASE_ID,
+            process.env.APPWRITE_TABLE_ID,
+            `yt_${req.params.youtubeId}`
+        )
+        // got here = cache HIT
+        return res.json({ streamUrl: row.fileUrl, cached: true })
+    } catch (err) {
+        // getRow threw = cache MISS (row doesn't exist), fall through
+        //console.error('Cache miss (or error):', err.message)
+    }
+
+
     const args = ['--remote-components', 'ejs:github', '-f', 'bestaudio', '-g', videoUrl]
     execFile('yt-dlp', args, (error, stdout, stderr) => {
         if (error) {
