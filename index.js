@@ -38,6 +38,12 @@ app.get('/stream/:youtubeId', async (req, res) => {
     } catch (err) {
         // getRow threw = cache MISS (row doesn't exist), fall through
         //console.error('Cache miss (or error):', err.message)
+        console.error(err);           // full error to Render logs
+        res.status(500).json({
+            error: "Extraction failed",
+            message: err.message,
+            stderr: err.stderr?.toString(),   // <-- this is the yt-dlp output we need
+        });
     }
 
 
