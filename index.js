@@ -38,21 +38,19 @@ app.get('/stream/:youtubeId', async (req, res) => {
     } catch (err) {
         // getRow threw = cache MISS (row doesn't exist), fall through
         //console.error('Cache miss (or error):', err.message)
-        console.error(err);           // full error to Render logs
-        res.status(500).json({
-            error: "Extraction failed",
-            message: err.message,
-            stderr: err.stderr?.toString(),   // <-- this is the yt-dlp output we need
-        });
+        console.log('Cache miss for', req.params.youtubeId)
     }
 
 
-    const args = ['--remote-components', 'ejs:github', '-f', 'bestaudio', '-g', videoUrl]
-    execFile('yt-dlp', args, (error, stdout, stderr) => {
+    const args = ['--js-runtimes', 'node', '--remote-components', 'ejs:github', '-f', 'bestaudio', '-g', videoUrl]
+    execFile('./bin/yt-dlp', args, (error, stdout, stderr) => {
         if (error) {
-            console.error(error)
-            res.status(500).json({ error: 'Extraction failed' })
-            return
+            console.error('yt-dlp error:', error)
+            console.error('yt-dlp stderr:', stderr)
+            return res.status(500).json({
+                error: 'Extraction failed',
+                stderr: stderr?.toString(),
+            })
         }
         res.json({ streamUrl: stdout.trim() })
     })
