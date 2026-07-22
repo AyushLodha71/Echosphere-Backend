@@ -54,6 +54,8 @@ app.get('/stream/:youtubeId', async (req, res) => {
         '--js-runtimes',
         'node', '--remote-components',
         'ejs:github', '-f', 'bestaudio', '-g', videoUrl]
+    
+    const tYtdlp = Date.now()
     execFile('./bin/yt-dlp', args, (error, stdout, stderr) => {
         console.log('yt-dlp took:', Date.now() - tYtdlp, 'ms')
         if (error) {
