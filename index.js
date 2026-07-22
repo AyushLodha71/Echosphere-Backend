@@ -18,6 +18,11 @@ const client = new Client()
 const databases = new Databases(client)
 const storage = new Storage(client)
 
+const fs = require('fs')
+if (process.env.YT_COOKIES_B64) {
+    fs.writeFileSync('/tmp/cookies.txt', Buffer.from(process.env.YT_COOKIES_B64, 'base64'))
+}
+
 // define a route
 app.get('/health', (req, res) => {
     console.log('Status: alive')
@@ -42,7 +47,10 @@ app.get('/stream/:youtubeId', async (req, res) => {
     }
 
 
-    const args = ['--js-runtimes', 'node', '--remote-components', 'ejs:github', '-f', 'bestaudio', '-g', videoUrl]
+    const args = [ '--cookies', '/tmp/cookies.txt',
+        '--js-runtimes',
+        'node', '--remote-components',
+        'ejs:github', '-f', 'bestaudio', '-g', videoUrl]
     execFile('./bin/yt-dlp', args, (error, stdout, stderr) => {
         if (error) {
             console.error('yt-dlp error:', error)
