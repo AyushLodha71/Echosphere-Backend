@@ -30,6 +30,7 @@ app.get('/health', (req, res) => {
 })
 
 app.get('/stream/:youtubeId', async (req, res) => {
+    const tStart = Date.now()
     const videoUrl = `https://www.youtube.com/watch?v=${req.params.youtubeId}`
     // 1. CACHE CHECK — try to fetch the row by ID
     try {
@@ -39,10 +40,12 @@ app.get('/stream/:youtubeId', async (req, res) => {
             `yt_${req.params.youtubeId}`
         )
         // got here = cache HIT
+        console.log('Appwrite lookup (hit):', Date.now() - tStart, 'ms')
         return res.json({ streamUrl: row.fileUrl, cached: true })
     } catch (err) {
         // getRow threw = cache MISS (row doesn't exist), fall through
         //console.error('Cache miss (or error):', err.message)
+        console.log('Appwrite lookup (miss):', Date.now() - tStart, 'ms')
         console.log('Cache miss for', req.params.youtubeId)
     }
 
@@ -52,6 +55,7 @@ app.get('/stream/:youtubeId', async (req, res) => {
         'node', '--remote-components',
         'ejs:github', '-f', 'bestaudio', '-g', videoUrl]
     execFile('./bin/yt-dlp', args, (error, stdout, stderr) => {
+        console.log('yt-dlp took:', Date.now() - tYtdlp, 'ms')
         if (error) {
             console.error('yt-dlp error:', error)
             console.error('yt-dlp stderr:', stderr)
