@@ -75,6 +75,46 @@ app.get('/stream/:youtubeId', async (req, res) => {
     }
 })
 
+// define the route search
+app.get('/search', async (req, res) => {
+    const query = req.query.q
+
+    if (!query) {
+        return res.status(400).json({ error: 'Missing query parameter q' })
+    }
+
+    const url = 'https://www.googleapis.com/youtube/v3/search'
+        + '?part=snippet'
+        + '&type=video'
+        + '&maxResults=20'
+        + `&q=${encodeURIComponent(query)}`
+        + `&key=${process.env.YOUTUBE_API_KEY}`
+
+    try {
+        const response = await fetch(url)
+
+        if (!response.ok) {
+            console.error('YouTube API error:', response.status)
+            return res.status(502).json({ error: 'Search failed' })
+        }
+
+        const data = await response.json()
+
+        const results = data.items.map(item => ({
+            id: item.id.videoId,
+            title: item.snippet.title,
+            artist: item.snippet.channelTitle,
+            thumbnailId: item.id.videoId
+        }))
+
+        return res.json(results)
+
+    } catch (err) {
+        console.error('Search error:', err)
+        return res.status(500).json({ error: 'Server error' })
+    }
+})
+
 const port = process.env.PORT || 3000
 
 // start server, run callback when up
