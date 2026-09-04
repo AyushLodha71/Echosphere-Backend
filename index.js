@@ -1,76 +1,80 @@
 require('dotenv').config()
 
-// import a package
 const express = require('express')
-
-// call a function, store result
 const app = express()
 
-const { execFile } = require('child_process')
-
-const { Client, Databases, Storage } = require('node-appwrite')
+const { Client, TablesDB } = require('node-appwrite')
 
 const client = new Client()
     .setEndpoint(process.env.APPWRITE_ENDPOINT)
     .setProject(process.env.APPWRITE_PROJECT_ID)
     .setKey(process.env.APPWRITE_API_KEY)
 
-const databases = new Databases(client)
-const storage = new Storage(client)
+const tablesDB = new TablesDB(client)
 
-const fs = require('fs')
-if (process.env.YT_COOKIES_B64) {
-    fs.writeFileSync('/tmp/cookies.txt', Buffer.from(process.env.YT_COOKIES_B64, 'base64'))
-}
-
-// define a route
+// define the route health
 app.get('/health', (req, res) => {
     console.log('Status: alive')
     res.json({ status: 'alive' })
 })
 
+// define the route stream
 app.get('/stream/:youtubeId', async (req, res) => {
-    const tStart = Date.now()
-    const videoUrl = `https://www.youtube.com/watch?v=${req.params.youtubeId}`
-    // 1. CACHE CHECK — try to fetch the row by ID
+    const youtubeId = req.params.youtubeId
+    const rowId = `yt_${youtubeId}`
+
+    const title = req.query.title || 'Unknown'
+    const artist = req.query.artist || null
+
     try {
-        const row = await databases.getDocument(
-            process.env.APPWRITE_DATABASE_ID,
-            process.env.APPWRITE_TABLE_ID,
-            `yt_${req.params.youtubeId}`
-        )
-        // got here = cache HIT
-        console.log('Appwrite lookup (hit):', Date.now() - tStart, 'ms')
-        return res.json({ streamUrl: row.fileUrl, cached: true })
-    } catch (err) {
-        // getRow threw = cache MISS (row doesn't exist), fall through
-        //console.error('Cache miss (or error):', err.message)
-        console.log('Appwrite lookup (miss):', Date.now() - tStart, 'ms')
-        console.log('Cache miss for', req.params.youtubeId)
-    }
+        const row = await tablesDB.getRow({
+            databaseId: process.env.APPWRITE_DATABASE_ID,
+            tableId: process.env.APPWRITE_TABLE_ID,
+            rowId: rowId
+        })
 
+        await tablesDB.updateRow({
+            databaseId: process.env.APPWRITE_DATABASE_ID,
+            tableId: process.env.APPWRITE_TABLE_ID,
+            rowId: rowId,
+            data: {
+                playCount: row.playCount + 1,
+                lastPlayedAt: new Date().toISOString()
+            }
+        })
 
-    const args = [ '--cookies', '/tmp/cookies.txt',
-        '--js-runtimes',
-        'node', '--remote-components',
-        'ejs:github', '-f', 'bestaudio', '-g', videoUrl]
-    
-    const tYtdlp = Date.now()
-    execFile('./bin/yt-dlp', args, (error, stdout, stderr) => {
-        console.log('yt-dlp took:', Date.now() - tYtdlp, 'ms')
-        if (error) {
-            console.error('yt-dlp error:', error)
-            console.error('yt-dlp stderr:', stderr)
-            return res.status(500).json({
-                error: 'Extraction failed',
-                stderr: stderr?.toString(),
-            })
+        if (row.uploaded === true) {
+            return res.json({ streamUrl: row.fileUrl, cached: true })
+        } else {
+            return res.status(404).json({ cached: false })
         }
-        res.json({ streamUrl: stdout.trim() })
-    })
+
+    } catch (err) {
+
+        if (err.code !== 404) {
+            console.error('Appwrite error (not a miss):', err)
+            return res.status(500).json({ error: 'Server error' })
+        }
+
+        console.log('New demand row for', youtubeId)
+
+        await tablesDB.createRow({
+            databaseId: process.env.APPWRITE_DATABASE_ID,
+            tableId: process.env.APPWRITE_TABLE_ID,
+            rowId: rowId,
+            data: {
+                title: title,
+                artist: artist,
+                playCount: 1,
+                uploaded: false,
+                lastPlayedAt: new Date().toISOString()
+            }
+        })
+
+        return res.status(404).json({ cached: false })
+    }
 })
 
-// read env var with fallback
 const port = process.env.PORT || 3000
 
 // start server, run callback when up
